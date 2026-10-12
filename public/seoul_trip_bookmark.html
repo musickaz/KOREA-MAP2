@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ソウル旅行しおり (SEOUL TRIP 2026) - 完全1ファイル版</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    .custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.4); border-radius: 9999px; }
+    .pin-pulse { animation: pinPulse 2s cubic-bezier(0, 0, 0.2, 1) infinite; }
+    @keyframes pinPulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.6); opacity: 0; } 100% { transform: scale(1); opacity: 0; } }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 h-screen w-screen overflow-hidden flex flex-col antialiased">
+  <header class="h-12 bg-white/80 backdrop-blur-md border-b border-slate-200/80 px-4 flex items-center justify-between z-30 shrink-0 shadow-xs">
+    <div class="flex items-center gap-2">
+      <span class="text-base">🇰🇷</span>
+      <div>
+        <h1 class="text-xs sm:text-sm font-black tracking-tight text-slate-900 leading-tight">ソウル旅行しおり 2026 (オフライン完全完結版)</h1>
+        <p class="text-[10px] text-slate-500 font-medium">10/12(月)〜10/14(水) 3Days・20名ツアー</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+      <button onclick="setDayFilter('all')" id="btn-day-all" class="day-btn px-2 py-0.5 text-xs font-bold rounded-md text-slate-600">全日程</button>
+      <button onclick="setDayFilter(1)" id="btn-day-1" class="day-btn px-2 py-0.5 text-xs font-bold rounded-md bg-sky-500 text-white shadow-xs">Day 1</button>
+      <button onclick="setDayFilter(2)" id="btn-day-2" class="day-btn px-2 py-0.5 text-xs font-bold rounded-md text-slate-600">Day 2</button>
+      <button onclick="setDayFilter(3)" id="btn-day-3" class="day-btn px-2 py-0.5 text-xs font-bold rounded-md text-slate-600">Day 3</button>
+    </div>
+  </header>
+
+  <div class="flex-1 flex flex-col h-[calc(100vh-3rem)] overflow-hidden">
+    <!-- UPPER HALF (50vh) -->
+    <div class="h-[50vh] relative w-full bg-slate-200 border-b border-slate-200/80 shrink-0">
+      <div id="standalone-map" class="w-full h-full z-0"></div>
+      <div class="absolute top-2 right-2 z-20 flex flex-col gap-1">
+        <button onclick="resetMapView()" title="全体表示" class="w-8 h-8 flex items-center justify-center bg-white/90 backdrop-blur-md rounded-lg shadow border border-white/60 text-slate-700 font-bold text-xs">⛶</button>
+        <button onclick="locateMe()" title="現在地" class="w-8 h-8 flex items-center justify-center bg-white/90 backdrop-blur-md rounded-lg shadow border border-white/60 text-slate-700 font-bold text-xs">📍</button>
+      </div>
+      <div class="absolute top-2 left-2 z-20 pointer-events-none">
+        <div id="map-badge" class="px-2.5 py-1 bg-white/90 backdrop-blur-md border border-white/70 rounded-full shadow text-[11px] font-bold text-slate-700">
+          Day 1: 東大門カルチャー＆深夜市場
+        </div>
+      </div>
+    </div>
+
+    <!-- LOWER HALF (50vh) -->
+    <div class="h-[50vh] flex flex-col md:flex-row bg-slate-50 overflow-hidden">
+      <div class="md:hidden flex border-b border-slate-200 bg-white shrink-0">
+        <button onclick="setMobileView('timeline')" id="tab-mobile-timeline" class="flex-1 py-2 text-xs font-bold text-sky-600 border-b-2 border-sky-500">タイムライン</button>
+        <button onclick="setMobileView('detail')" id="tab-mobile-detail" class="flex-1 py-2 text-xs font-bold text-slate-500 border-b-2 border-transparent">詳細情報</button>
+      </div>
+      <div id="timeline-container" class="w-full md:w-1/2 h-full overflow-y-auto custom-scrollbar p-3 border-r border-slate-200/80 bg-white/50">
+        <div id="timeline-list" class="space-y-2"></div>
+      </div>
+      <div id="detail-container" class="hidden md:block w-full md:w-1/2 h-full overflow-y-auto custom-scrollbar p-4 bg-white/80">
+        <div id="detail-content" class="h-full"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const SCHEDULE_DATA = [
+      { id: 'd1-1', day: 1, time: '07:45', title: '福岡空港', subtitle: '出発手続き・集合', koreanName: '후쿠오카 공항', lat: 33.5859, lng: 130.4507, description: '国際線ターミナル出発ロビー集合。全員パスポート確認、受託手荷物預け、両替・Wi-Fi/eSIMのセットアップ。', address: '福岡県福岡市博多区大字青木739', groupNote: '20名全員08:30までに搭乗ゲート前集合。' },
+      { id: 'd1-2', day: 1, time: '11:15', title: '仁川国際空港 第2ターミナル', subtitle: '到着・入国審査・移動', koreanName: '인천국제공항 제2여객터미널', lat: 37.4692, lng: 126.4340, description: '入国審査・手荷物受取後、空港リムジンバスまたはAREX直通列車で東大門へ移動。', address: '인천광역시 중구 공항로 272', groupNote: '到着ロビー5番ゲート前で点呼。' },
+      { id: 'd1-3', day: 1, time: '14:00', title: 'ホテル ガオン ゴールデン パーク 東大門', subtitle: 'チェックイン・荷物預け', koreanName: '호텔 가온 골든파크 동대문', lat: 37.5714, lng: 127.0163, description: 'ホテル到着。チェックインまたは荷物預け後、身軽になってランチへ。', address: '서울특별시 종로구 종로 347 (숭인동 310)', groupNote: '14:20ロビー集合でタッカンマリ横丁へ徒歩移動。' },
+      { id: 'd1-4', day: 1, time: '14:30', title: '陳玉華ハルメ元祖タッカンマリ', subtitle: '遅めランチ・タッカンマリ', koreanName: '진옥화할매원조닭한마리', lat: 37.5703, lng: 127.0055, description: '丸鶏を豪快に煮込んだ濃厚スープと特製ニンニク醤油タレ。シメのうどんは必食！', recommendedMenu: 'タッカンマリ、トック追加、ククス締め', address: '서울특별시 종로구 종로40가길 18' },
+      { id: 'd1-5', day: 1, time: '16:00', title: '東大門総合市場', subtitle: '布地・服飾副資材の問屋街視察', koreanName: '동대문종합시장', lat: 37.5705, lng: 127.0078, description: 'アジア最大規模のテキスタイル・副資材問屋街。4,000店が連なる巨大迷宮を視察。', address: '서울특별시 종로구 종로 266', groupNote: '17:30まで自由散策。A棟1階エントランス集合。' },
+      { id: 'd1-6', day: 1, time: '19:00', title: '河南テジチッ 東大門店', subtitle: '絶品サムギョプサルディナー', koreanName: '하남돼지집 동대문점', lat: 37.5682, lng: 127.0089, description: '炭火で燻製しスタッフが目の前で焼き上げる極上サムギョプサル。行者ニンニク巻きが絶品！', recommendedMenu: '生サムギョプサル、モクサル、キムチ焼き', address: '서울특별시 중구 을지로43길 5-4' },
+      { id: 'd1-7', day: 1, time: '20:30', title: '新堂 Showflix', subtitle: 'ミュージカルパブ体験', koreanName: '쇼플릭스 신당 (SHOWFLIX)', lat: 37.5654, lng: 127.0168, description: '現役ミュージカル俳優が生歌とダイナミックなパフォーマンスを客席の間で披露する人気パブ。', address: '서울특별시 중구 퇴계로83길 10-12' },
+      { id: 'd1-8', day: 1, time: '23:00', title: '東大門黄色テント', subtitle: '深夜のスーパーコピー市場視察', koreanName: '동대문 노란천막 (새빛시장)', lat: 37.5678, lng: 127.0098, description: 'DDP周辺に深夜出現する巨大露店街。夜市ならではの活気ある取引現場を視察。', address: '서울특별시 중구 마장로 22 (DDP 周辺)' },
+      { id: 'd1-9', day: 1, time: '25:30', title: 'ユジョン食堂', subtitle: '東大門の24時間チゲで締め', koreanName: '유정식당 (동대문 24시)', lat: 37.5694, lng: 127.0125, description: '問屋バイヤー御用達の24時間食堂。スンドゥブやキムチチゲで深夜の胃袋を満たします。', address: '서울특별시 중구 종로46길 23' },
+      { id: 'd2-1', day: 2, time: '09:30', title: '武橋洞プゴクッチプ', subtitle: '干し鱈スープ朝食 ※希望者', koreanName: '무교동 북어국집', lat: 37.5676, lng: 126.9798, description: '1968年創業の干し鱈スープ専門店。二日酔いに染み渡る滋味深い乳白色スープ。', address: '서울특별시 중구 을지로1길 38' },
+      { id: 'd2-2', day: 2, time: '11:00', title: '南大門市場', subtitle: 'ディープ買い出し', koreanName: '남대문시장', lat: 37.5592, lng: 126.9776, description: '600年の歴史を誇るソウル最大の伝統市場。海苔、高麗人参、ホットクなど食べ歩きとお土産購入。', address: '서울특별시 중구 남대문시장4길 21' },
+      { id: 'd2-3', day: 2, time: '12:30', title: '南大門 カルグクス横丁', subtitle: 'ローカル昼食', koreanName: '남대문 칼국수 골목', lat: 37.5588, lng: 126.9770, description: '手打ちカルグクスを頼むとビビン冷麺と赤飯がついてくる驚異のボリュームと活気！', address: '서울특별시 중구 남대문시장4길 42-1' },
+      { id: 'd2-4', day: 2, time: '14:30', title: 'ホテル帰還', subtitle: '体力回復の休憩', koreanName: '호텔 가온 (휴식)', lat: 37.5714, lng: 127.0163, description: 'お土産を置き、夜の江南ナイトへ向けてシャワーと仮眠タイム。', address: '서울특별시 종로구 종로 347' },
+      { id: 'd2-5', day: 2, time: '17:30', title: 'COEXモール / ピョルマダン図書館', subtitle: '女性陣と合流', koreanName: '별마당 도서관', lat: 37.5101, lng: 127.0590, description: '高さ13mの巨大書架が圧巻の映えスポット。女性陣と合流しショッピング。', address: '서울특별시 강남구 영동대로 513' },
+      { id: 'd2-6', day: 2, time: '18:30', title: '大都食堂 江南大路店', subtitle: '韓牛ロースディナー', koreanName: '대도식당 강남대로점', lat: 37.5085, lng: 127.0229, description: '最高等級の韓牛ロースを鉄鍋で一気に焼き上げ。締めの大根キムチ炒飯は絶品！', address: '서울특별시 서초구 강남대로 565' },
+      { id: 'd2-7', day: 2, time: '20:30', title: 'Get All Right 清潭', subtitle: 'ジャズ＆生演奏ショー', koreanName: '겟올라잇 청담', lat: 37.5252, lng: 127.0435, description: 'チョンダムドンの高級ラウンジ。生サックスやタップダンスの迫力ステージ。', address: '서울특별시 강남구 도산대로57길 18' },
+      { id: 'd2-8', day: 2, time: '22:00', title: 'DESSERT / エリエナホテル', subtitle: 'カンナムVIPナイト', koreanName: '엘리에나 호텔', lat: 37.5105, lng: 127.0315, description: '江南・論峴の高級ホテル内VIPラウンジ＆クラブ。圧倒的サウンドと演出。', address: '서울특별시 강남구 논현로 645' },
+      { id: 'd2-9', day: 2, time: '25:30', title: '永東ソルロンタン', subtitle: '江南の老舗スープで締め', koreanName: '영동설렁탕', lat: 37.5165, lng: 127.0194, description: '新沙駅近くの老舗24時間ソルロンタン。牛骨スープで胃を休めてホテルへ。', address: '서울특별시 서초구 강남대로101안길 24' },
+      { id: 'd3-1', day: 3, time: '10:00', title: '広蔵市場', subtitle: 'B級グルメ食べ歩き', koreanName: '광장시장', lat: 37.5700, lng: 127.0000, description: '緑豆チヂミ「ピンデトッ」、麻薬キンパ、新鮮なユッケ＆生タコをハシゴ！', address: '서울특별시 종로구 창경궁로 88' },
+      { id: 'd3-2', day: 3, time: '13:00', title: 'ホテル ガオン', subtitle: '荷物ピックアップ', koreanName: '호텔 가온', lat: 37.5714, lng: 127.0163, description: '荷物をまとめて空港直通交通機関へ乗車。', address: '서울특별시 종로구 종로 347' },
+      { id: 'd3-3', day: 3, time: '15:00', title: '仁川国際空港', subtitle: 'チェックイン', koreanName: '인천국제공항', lat: 37.4602, lng: 126.4407, description: 'タックスリファンド、搭乗手続き、免税店でお土産最終買い足し。', address: '인천광역시 중구 공항로 271' },
+      { id: 'd3-4', day: 3, time: '18:30', title: '福岡空港', subtitle: '帰国', koreanName: '후쿠오카 공항', lat: 33.5859, lng: 130.4507, description: '税関審査完了、到着ロビーへ。', address: '福岡県福岡市博多区大字青木739' },
+      { id: 'd3-5', day: 3, time: '20:00', title: '中洲エリア', subtitle: '打ち上げ', koreanName: '나카스', lat: 33.5902, lng: 130.4045, description: 'もつ鍋や屋台でソウル旅行の思い出を語る打ち上げ宴会！', address: '福岡県福岡市博多区中洲' }
+    ];
+
+    let currentDayFilter = 1;
+    let selectedSpotId = 'd1-1';
+    let map = null;
+    let markersMap = {};
+    let polyline = null;
+    let userMarker = null;
+    let mobileView = 'timeline';
+
+    function initMap() {
+      map = L.map('standalone-map', { zoomControl: false, attributionControl: false }).setView([37.5714, 127.0163], 14);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, crossOrigin: true }).addTo(map);
+      renderTimeline();
+      updateMapPins();
+      renderDetail(selectedSpotId);
+      window.addEventListener('resize', () => { if (map) map.invalidateSize(); });
+    }
+
+    function getFilteredSpots() {
+      if (currentDayFilter === 'all') return SCHEDULE_DATA;
+      return SCHEDULE_DATA.filter(s => s.day === currentDayFilter);
+    }
+
+    function setDayFilter(day) {
+      currentDayFilter = day;
+      document.querySelectorAll('.day-btn').forEach(btn => btn.className = 'day-btn px-2 py-0.5 text-xs font-bold rounded-md text-slate-600 hover:bg-slate-200');
+      const activeBtn = document.getElementById('btn-day-' + day);
+      if (activeBtn) activeBtn.className = 'day-btn px-2 py-0.5 text-xs font-bold rounded-md bg-sky-500 text-white shadow-xs';
+      
+      const badge = document.getElementById('map-badge');
+      if (badge) {
+        if (day === 'all') badge.textContent = '全日程ルートマップ (ソウル・福岡)';
+        else if (day === 1) badge.textContent = 'Day 1: 東大門カルチャー＆深夜市場';
+        else if (day === 2) badge.textContent = 'Day 2: 南大門ディープ＆江南ラグジュアリー';
+        else if (day === 3) badge.textContent = 'Day 3: 広蔵市場＆福岡中洲打ち上げ';
+      }
+
+      const spots = getFilteredSpots();
+      if (spots.length > 0 && !spots.some(s => s.id === selectedSpotId)) {
+        selectedSpotId = spots[0].id;
+      }
+      renderTimeline();
+      updateMapPins();
+      renderDetail(selectedSpotId);
+      resetMapView();
+    }
+
+    function updateMapPins() {
+      Object.values(markersMap).forEach(m => map.removeLayer(m));
+      markersMap = {};
+      if (polyline) map.removeLayer(polyline);
+
+      const spots = getFilteredSpots();
+      if (!spots.length) return;
+
+      const latLngs = spots.map(s => [s.lat, s.lng]);
+      polyline = L.polyline(latLngs, {
+        color: currentDayFilter === 'all' ? '#6366f1' : '#0284c7',
+        weight: 3.5, opacity: 0.75, dashArray: '6, 8', lineCap: 'round'
+      }).addTo(map);
+
+      spots.forEach((spot, idx) => {
+        const isSel = spot.id === selectedSpotId;
+        const iconHtml = \`
+          <div class="relative flex items-center justify-center cursor-pointer transition-all duration-200 \${isSel ? 'scale-125 z-50' : 'hover:scale-110 z-20'}">
+            \${isSel ? '<span class="absolute -inset-2 rounded-full bg-sky-400/40 pin-pulse"></span>' : ''}
+            <div class="flex items-center gap-1 px-2 py-1 rounded-full shadow-md border \${
+              isSel ? 'bg-slate-900 text-white border-sky-400 ring-2 ring-sky-400 ring-offset-1' : 'bg-white text-slate-800 border-slate-200'
+            }">
+              <span class="w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold \${isSel ? 'bg-sky-400 text-slate-900' : 'bg-slate-100 text-slate-700'}">
+                \${idx + 1}
+              </span>
+              <span class="text-xs font-semibold whitespace-nowrap">\${spot.time}</span>
+            </div>
+            <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 rotate-45 \${isSel ? 'bg-slate-900' : 'bg-white'} border-r border-b border-slate-300"></div>
+          </div>
+        \`;
+
+        const icon = L.divIcon({ html: iconHtml, className: 'custom-pin', iconSize: [80, 36], iconAnchor: [40, 36] });
+        const marker = L.marker([spot.lat, spot.lng], { icon, zIndexOffset: isSel ? 1000 : 10 })
+          .addTo(map)
+          .on('click', () => selectSpot(spot.id));
+        marker.bindTooltip('<div class="text-xs font-bold p-1">' + spot.title + '</div>', { direction: 'top', offset: [0, -28] });
+        markersMap[spot.id] = marker;
+      });
+    }
+
+    function selectSpot(id) {
+      selectedSpotId = id;
+      const spot = SCHEDULE_DATA.find(s => s.id === id);
+      if (!spot) return;
+
+      map.flyTo([spot.lat, spot.lng], 16, { animate: true, duration: 0.8 });
+      updateMapPins();
+      renderTimeline();
+      const el = document.getElementById('timeline-item-' + id);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      renderDetail(id);
+    }
+
+    function renderTimeline() {
+      const container = document.getElementById('timeline-list');
+      const spots = getFilteredSpots();
+      container.innerHTML = spots.map((spot) => {
+        const isSel = spot.id === selectedSpotId;
+        return \`
+          <div id="timeline-item-\${spot.id}" onclick="selectSpot('\${spot.id}')" class="p-3 rounded-xl border transition-all cursor-pointer \${
+            isSel ? 'bg-gradient-to-r from-sky-50 to-white border-sky-300 ring-2 ring-sky-400/30 shadow-sm' : 'bg-white hover:bg-slate-50 border-slate-200'
+          }">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs font-bold font-mono px-2 py-0.5 rounded \${isSel ? 'bg-sky-500 text-white' : 'bg-slate-100 text-slate-700'}">\${spot.time}</span>
+              <span class="text-[11px] text-slate-400 font-medium">Day \${spot.day}</span>
+            </div>
+            <div class="text-sm font-bold \${isSel ? 'text-sky-950' : 'text-slate-900'} truncate">\${spot.title}</div>
+            <div class="text-xs text-slate-500 truncate mt-0.5">\${spot.subtitle}</div>
+          </div>
+        \`;
+      }).join('');
+    }
+
+    function renderDetail(id) {
+      const container = document.getElementById('detail-content');
+      const spot = SCHEDULE_DATA.find(s => s.id === id);
+      if (!spot) return;
+
+      const spots = getFilteredSpots();
+      const currIdx = spots.findIndex(s => s.id === id);
+      const prevId = currIdx > 0 ? spots[currIdx - 1].id : null;
+      const nextId = currIdx < spots.length - 1 ? spots[currIdx + 1].id : null;
+
+      container.innerHTML = \`
+        <div class="h-full flex flex-col justify-between space-y-4">
+          <div>
+            <div class="flex items-center justify-between pb-2 border-b border-slate-100 mb-2">
+              <div class="flex gap-1">
+                <button onclick="\${prevId ? \`selectSpot('\${prevId}')\` : ''}" \${!prevId ? 'disabled' : ''} class="px-2.5 py-1 bg-slate-100 disabled:opacity-30 rounded-lg text-xs font-bold text-slate-700">← 前へ</button>
+                <button onclick="\${nextId ? \`selectSpot('\${nextId}')\` : ''}" \${!nextId ? 'disabled' : ''} class="px-2.5 py-1 bg-slate-100 disabled:opacity-30 rounded-lg text-xs font-bold text-slate-700">次へ →</button>
+              </div>
+              <span class="text-xs font-mono font-bold text-sky-600 bg-sky-50 px-2 py-0.5 rounded">Day \${spot.day} • \${spot.time}</span>
+            </div>
+            <h2 class="text-lg font-black text-slate-900 leading-tight">\${spot.title}</h2>
+            <p class="text-xs text-slate-500 font-medium mt-0.5">\${spot.subtitle}</p>
+            \${spot.koreanName ? \`
+              <div class="mt-2.5 p-2.5 bg-sky-50 border border-sky-200 rounded-xl flex items-center justify-between">
+                <div>
+                  <span class="text-[10px] font-bold text-sky-700 uppercase tracking-wider block">タクシー提示用ハングル</span>
+                  <p class="text-base font-black text-slate-900">\${spot.koreanName}</p>
+                </div>
+                <button onclick="navigator.clipboard.writeText('\${spot.koreanName}'); alert('コピーしました: ' + '\${spot.koreanName}');" class="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700">コピー</button>
+              </div>
+            \` : ''}
+            <div class="mt-3 text-xs text-slate-700 leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-200/60">\${spot.description}</div>
+            \${spot.recommendedMenu ? \`<div class="mt-2 p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-950 font-medium"><span class="font-bold text-amber-900 block">🍲 おすすめ:</span>\${spot.recommendedMenu}</div>\` : ''}
+            \${spot.groupNote ? \`<div class="mt-2 p-2.5 bg-indigo-50 border border-indigo-200 rounded-xl text-xs text-indigo-950"><span class="font-bold text-indigo-900 block">👥 20名団体メモ:</span>\${spot.groupNote}</div>\` : ''}
+            \${spot.address ? \`<div class="mt-3 text-xs text-slate-600 font-mono">📍 \${spot.address}</div>\` : ''}
+          </div>
+          <div class="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+            <a href="https://map.naver.com/v5/search/\${encodeURIComponent(spot.koreanName || spot.title)}" target="_blank" class="py-2 text-center bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-2xs">Naver Map</a>
+            <a href="https://www.google.com/maps/search/?api=1&query=\${spot.lat},\${spot.lng}" target="_blank" class="py-2 text-center bg-slate-800 text-white rounded-xl text-xs font-bold shadow-2xs">Google Maps</a>
+          </div>
+        </div>
+      \`;
+    }
+
+    function resetMapView() {
+      const spots = getFilteredSpots();
+      if (!spots.length || !map) return;
+      const bounds = L.latLngBounds(spots.map(s => [s.lat, s.lng]));
+      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
+    }
+
+    function locateMe() {
+      if (!navigator.geolocation) { alert('位置情報に対応していません'); return; }
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          if (userMarker) map.removeLayer(userMarker);
+          userMarker = L.circleMarker([lat, lng], { radius: 8, fillColor: '#0284c7', color: '#fff', weight: 2, fillOpacity: 0.9 }).addTo(map);
+          map.flyTo([lat, lng], 16);
+        },
+        () => alert('現在地を取得できませんでした')
+      );
+    }
+
+    function setMobileView(view) {
+      mobileView = view;
+      const timelineCont = document.getElementById('timeline-container');
+      const detailCont = document.getElementById('detail-container');
+      const tabTimeline = document.getElementById('tab-mobile-timeline');
+      const tabDetail = document.getElementById('tab-mobile-detail');
+      if (view === 'timeline') {
+        timelineCont.classList.remove('hidden');
+        detailCont.classList.add('hidden');
+        tabTimeline.className = 'flex-1 py-2 text-xs font-bold text-sky-600 border-b-2 border-sky-500';
+        tabDetail.className = 'flex-1 py-2 text-xs font-bold text-slate-500 border-b-2 border-transparent';
+      } else {
+        timelineCont.classList.add('hidden');
+        detailCont.classList.remove('hidden');
+        tabTimeline.className = 'flex-1 py-2 text-xs font-bold text-slate-500 border-b-2 border-transparent';
+        tabDetail.className = 'flex-1 py-2 text-xs font-bold text-sky-600 border-b-2 border-sky-500';
+      }
+    }
+
+    window.onload = initMap;
+  </script>
+</body>
+</html>

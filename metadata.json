@@ -1,0 +1,6 @@
+{
+  "name": "ソウル旅行しおり",
+  "description": "Leaflet地図と連動する3日間のソウル旅行しおりWebアプリ。スケジュールタイムライン、スポット詳細、オフライン対応。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
